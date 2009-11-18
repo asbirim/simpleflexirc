@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Panel xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" initialize="init()" width="810" height="516" xmlns:ns1="com.jonnyfunfun.*">
+	<mx:Script>
+		<![CDATA[
+			import mx.collections.SortField;
+			import mx.collections.Sort;
+			import mx.core.IFlexDisplayObject;
+			import mx.managers.PopUpManager;
+			import com.oosterwijk.irc.*;
+			import com.oosterwijk.irc.error.IrcError;
+			import com.oosterwijk.irc.event.*;
+			import com.jonnyfunfun.ChatLineTypes;
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.core.Application;
+			
+			protected var client:FlexIrcClient;
+			[Bindable] private var userList:ArrayCollection = new ArrayCollection();
+			private var channel:String;
+			private var channelUsers:Array;
+			private var chatUsername:String;
+			private var chanServPW:String;
+			
+			private var userListSort:Sort;
+			
+			private var loginPopup:IFlexDisplayObject;
+			
+			private var newNickRetries:uint = 0;
+			
+			private function init():void
+			{
+				client = new FlexIrcClient();
+				// Register event handlers
+				client.addEventListener(FlexIrcClient.CONNECT_EVENT,onConnect);
+				client.addEventListener(FlexIrcClient.DISCONNECT_EVENT,onDisconnect);
+				client.addEventListener(FlexIrcClient.USER_LIST_EVENT,onUserList);
+				client.addEventListener(FlexIrcClient.MESSAGE_EVENT,onMessageReceived);
+				client.addEventListener(FlexIrcClient.CHANNEL_INFO_EVENT,onChanInfo);
+				client.addEventListener(FlexIrcClient.JOIN_EVENT,onJoin);
+				client.addEventListener(FlexIrcClient.PART_EVENT,onPart);
+				client.addEventListener(FlexIrcClient.KICK_EVENT,onKick);
+				client.addEventListener(FlexIrcClient.MODE_EVENT,onModeChange);
+				client.addEventListener(FlexIrcClient.PRIVATE_MESSAGE_EVENT,onPM);
+				
+				client.addEventListener(FlexIrcClient.NICK_ALREADY_IN_USE_EVENT,tryOtherNick);
+				client.addEventListener(FlexIrcClient.NICK_CHANGE_EVENT,finallyJoinChannel);
+				client.addEventListener(FlexIrcClient.IRC_CONNECTION_ERROR_EVENT,handleConnectionError);
+				client.addEventListener(FlexIrcClient.SERVER_RESPONSE_EVENT,onServerResponse);
+				
+				// Check to see if we've been passed a username...
+				if (Application.application.parameters.c_u != null) {
+					// We have, so use that username and connect directly!
+					chatUsername = Application.application.parameters.c_u;	
+					client.connect("miranda.jonnyfunfun.net");
+				} else {
+					loginPopup = new LoginBox();
+					loginPopup.addEventListener("Login",handleLoginGo);
+					// Show the popup
+					PopUpManager.addPopUp(loginPopup,this,true);
+					PopUpManager.centerPopUp(loginPopup);
+				}
+			}
+			
+			public function disconnect():void
+			{
+				client.partChannel("#jonnyfunfun","signing off");
+				client.disconnect();
+			}
+			
+			protected function onServerResponse(e:ServerEvent)
+			{
+				trace(e.code.toString() + ": " + e.response);
+				if (e.code == 433) {
+					// Username is in use
+					tryOtherNick(null);
+				}
+			}
+			
+			protected function handleConnectionError(e:Error)
+			{
+				Alert.show("There was an error connecting to the server: " + e.message,"Error");
+			}
+			
+			protected function handleLoginGo(e:Event):void
+			{
+				writeMessageLine("Connecting to chat...",ChatLineTypes.NOTICE);
+				chatUsername = (loginPopup as LoginBox).loginUsername;
+				chanServPW = (loginPopup as LoginBox).loginChanServPW;		
+				client.connect("irc.jonnyfunfun.net");
+				PopUpManager.removePopUp(loginPopup);
+			}
+			
+			protected function onPM(e:UserEvent):void
+			{
+				writeMessageLine(e.message,ChatLineTypes.PRIVATE_MESSAGE,e.sender);
+			}
+			
+			protected function tryOtherNick(e:Event):void
+			{
+				trace("Nick is in use already!");
+				if (newNickRetries == 0)
+					writeMessageLine("The nickname " + chatUsername + " was already in use, trying another one...",ChatLineTypes.NOTICE); 
+				++newNickRetries;
+				chatUsername = chatUsername + Math.round(Math.random() * 9);
+				client.changeNick(chatUsername);
+			}
+			
+			protected function onConnect(e:IrcEvent):void
+			{		
+				client.changeNick(chatUsername);
+				if (chanServPW.length > 0) {
+					// Auth to ChanServ
+					client.sendMessage("ChanServ","IDENTIFY " + chanServPW);
+				}
+			}
+			
+			protected function finallyJoinChannel(e:Event):void 
+			{
+				channel = "#jonnyfunfun";
+				client.joinChannel(channel);
+				writeMessageLine("You have successfully connected to The Brew Place chat",ChatLineTypes.NOTICE);
+			}
+			
+			protected function onDisconnect(e:IrcEvent):void
+			{
+				writeMessageLine("You have been disconnected",ChatLineTypes.NOTICE);
+			}
+			
+			protected function onUserList(e:ChannelEvent):void
+			{
+				if (e.channel != channel)
+					return;
+				var opUsers:Array = new Array();
+				var voiceUsers:Array = new Array();
+				var regUsers:Array = new Array();
+				channelUsers = e.users;
+				for (var i:uint = 0; i < channelUsers.length; i++) {
+					if ((channelUsers[i] as User).isOp())
+						opUsers.push("@" + (channelUsers[i] as User).getNick());
+					else if ((channelUsers[i] as User).hasVoice())
+						voiceUsers.push("+" + (channelUsers[i] as User).getNick());
+					else
+						regUsers.push((channelUsers[i] as User).getNick());
+				}
+				userList = new ArrayCollection();
+				// Since things get added to the top of the stack each time, we have to
+				// reverse the lists first for proper irc-like sorting...
+				regUsers = regUsers.reverse();
+				voiceUsers = voiceUsers.reverse();
+				opUsers = opUsers.reverse();
+				var u:String;
+				for each (u in regUsers)
+					userList.addItemAt({username: u},0);
+				for each (u in voiceUsers)
+					userList.addItemAt({username: u},0);
+				for each (u in opUsers)
+					userList.addItemAt({username: u},0);
+			}
+			
+			protected function onMessageReceived(e:ChannelEvent):void
+			{
+				var thisUser:User = null;
+				for (var i:uint = 0; i < channelUsers.length; i++) {
+					if ((channelUsers[i] as User).getNick() == e.sender) {
+						thisUser = channelUsers[i];
+						break;
+					}
+				}
+				var thisType:ChatLineTypes = ChatLineTypes.MESSAGE;
+				if (thisUser != null) {
+					if (thisUser.isOp())
+						thisType = ChatLineTypes.OP_MESSAGE;
+					else if (thisUser.hasVoice())
+						thisType = ChatLineTypes.VOICED_MESSAGE;
+				}
+				// This will colorize chats with our name anywhere in it
+				if (e.message.toUpperCase().indexOf(chatUsername.toUpperCase()) != -1)
+					thisType = ChatLineTypes.FLAG_MESSAGE;
+				writeMessageLine(e.message,ChatLineTypes.MESSAGE,e.sender);
+			}
+			
+			protected function onChanInfo(e:ChannelEvent):void
+			{
+				writeMessageLine(e.message,ChatLineTypes.NOTICE);
+			}
+			
+			protected function onJoin(e:ChannelEvent):void
+			{
+				if (e.channel != channel)
+					return;
+				userList.addItem(e.sender);
+				// Write to channel e.sender joined
+				writeMessageLine("",ChatLineTypes.JOIN,e.sender);
+			}
+			
+			protected function onPart(e:ChannelEvent):void
+			{
+				if (e.channel != channel)
+					return;
+				for (var i:uint = 0; i < userList.length; i++) {
+					if ((userList.getItemAt(i) as String) == e.sender) {
+						userList.removeItemAt(i);
+						return;
+					}
+				}
+				// Write to channel log, e.sender left
+				writeMessageLine("",ChatLineTypes.PART,e.sender);
+			}
+			
+			protected function onKick(e:ChannelEvent):void
+			{
+				if (e.channel != channel)
+					return;
+				for (var i:uint = 0; i < userList.length; i++) {
+					if ((userList.getItemAt(i) as String) == e.targetNick) {
+						userList.removeItemAt(i);
+						return;
+					}
+				}
+				// Write to channel e.targetNick kicked by e.sender for e.message
+				writeMessageLine(e.message,ChatLineTypes.KICK,e.sender);
+			}
+			
+			protected function onModeChange(e:ChannelEvent):void
+			{
+				//TODO
+				writeMessageLine(e.mode,ChatLineTypes.MODE,e.sender,e.target);
+			}
+			
+			private function sendMessage(e:Event):void
+			{
+				if ((ti_chatInput.text == "") || (ti_chatInput.text.substr(0,1) == "/")) {
+					ti_chatInput.text = "";
+					return;	
+				}
+				client.sendMessage(channel, ti_chatInput.text);
+				writeMessageLine(ti_chatInput.text,ChatLineTypes.MESSAGE,chatUsername);
+				ti_chatInput.text = "";
+			}
+			
+			private function truncateMessageBox(bufferLength:uint = 8192):void
+			{
+				//TODO: make this better
+				if (ta_channelLog.htmlText.length < bufferLength)
+					return;
+				ta_channelLog.htmlText = ta_channelLog.htmlText.slice(ta_channelLog.htmlText.length - bufferLength);
+				ta_channelLog.htmlText = ta_channelLog.htmlText.slice(ta_channelLog.htmlText.indexOf("<br />") + 6);
+			}
+			
+			protected function writeMessageLine(msg:String, type:ChatLineTypes = null, sdr:String = null, tgt:Object = null):void
+			{
+				var buildMsg:String = "";
+				if (type == null)
+					type = ChatLineTypes.MESSAGE;
+				switch (type) {
+					case ChatLineTypes.JOIN:
+						buildMsg += '<font color="#FF9900"><b>';
+						buildMsg += sdr + " has joined chat.";
+						buildMsg += "</b></font>";
+						break;
+					case ChatLineTypes.KICK:
+						buildMsg += '<font color="#FF0000"><b>';
+						buildMsg += tgt + " was kicked by " + sdr + ": " + msg;
+						buildMsg += "<b></font>";
+						break;
+					case ChatLineTypes.MESSAGE:
+						buildMsg += '<font color="#000000">' + sdr + '&gt;&nbsp;</font>';
+						buildMsg += msg;
+						break;
+					case ChatLineTypes.MODE:
+						buildMsg += '<font color="#000088">' + sdr + ' sets mode ' + msg + '</font>';
+						break;
+					case ChatLineTypes.NOTICE:
+						buildMsg += '<font color="#FF9900">' + msg + '</font>';
+						break;
+					case ChatLineTypes.OP_MESSAGE:
+						buildMsg += '<font color="#CC7100"><b>@' + sdr + '&gt;</b>&nbsp;</font>';
+						buildMsg += msg;
+						break;
+					case ChatLineTypes.PART:
+						buildMsg += '<font color="#FF9900"><b>';
+						buildMsg += sdr + " has left chat.";
+						buildMsg += "</b></font>";
+						break;
+					case ChatLineTypes.VOICED_MESSAGE:
+						buildMsg += '<font color="#F6EFBB">+' + sdr + '&gt;&nbsp;</font>';
+						buildMsg += msg;
+						break;
+					case ChatLineTypes.FLAG_MESSAGE:
+						buildMsg += '<font color="#003300">' + sdr + '&gt;&nbsp;</font>';
+						buildMsg += '<u>' + msg + '</u>';
+						break;
+					case ChatLineTypes.PRIVATE_MESSAGE:
+						buildMsg += '<font color="#FF00FF"><b>[PM FROM ' + sdr + ']&gt;&nbsp;';
+						buildMsg += msg + '</b></font>';
+						break;
+					default:
+						break;
+				}
+				ta_channelLog.htmlText += buildMsg; //"<br />" + 
+				truncateMessageBox();
+			}
+		]]>
+	</mx:Script>
+	<mx:HBox width="100%" height="100%">
+		<mx:VBox height="100%" width="100%">
+			<mx:TextArea width="100%" height="100%" editable="false" id="ta_channelLog" htmlText="" wordWrap="true" verticalScrollPolicy="on" horizontalScrollPolicy="off" fontSize="11"/>
+			<mx:HBox width="100%" height="30" id="hbox1">
+				<mx:TextInput width="100%" id="ti_chatInput" enter="sendMessage(event)"/>
+				<mx:Button label="Send" paddingRight="4" id="btn_send" click="sendMessage(event)"/>
+			</mx:HBox>
+		</mx:VBox>
+		<mx:Canvas width="200" height="100%">
+			<mx:VBox height="100%" width="100%" verticalGap="2">
+				<mx:Spacer height="1"/>
+				<mx:Text text="People in Chat" fontSize="11" textAlign="center" width="100%" fontWeight="bold"/>
+				<mx:DataGrid id="dg_users" width="100%" height="100%" dataProvider="{userList}" showHeaders="false" y="57" verticalScrollPolicy="on" horizontalScrollPolicy="off">
+					<mx:columns>
+						<mx:DataGridColumn id="dgc_userName" dataField="username"/>
+					</mx:columns>
+				</mx:DataGrid>	
+			</mx:VBox>
+		</mx:Canvas>
+	</mx:HBox>
+</mx:Panel>

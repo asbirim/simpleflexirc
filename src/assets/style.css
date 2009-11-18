@@ -1,0 +1,108 @@
+/* CSS file */
+
+
+Application
+{
+	color: #000000;
+	backgroundGradientAlphas: 1.0, 1.0;
+	backgroundGradientColors: #F6EFBB, #F6EFBB;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+}
+Alert
+{
+	backgroundColor: #F6EFBB;
+	controlBarStyleName: alertControlBar;
+	borderColor: #CC7100;
+	color: #000000;
+	roundedBottomCorners: true;
+}
+Button
+{
+	borderColor: #000000;
+	themeColor: #CC7100;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+	color: #342208;
+}
+ComboBox
+{
+	borderColor: #000000;
+	themeColor: #CC7100;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+	color: #342208;
+}
+.chatDataGrid
+{
+	borderColor: #000000;
+	themeColor: #CC7100;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+	color: #000000;
+	rollOverColor: #FFFFFF;
+	selectionColor: #FFFFFF;
+	selectionDisabledColor: #FFFFFF;
+	verticalGridLines: false;
+	disabledColor: #000000;
+	textRollOverColor: #000000;
+	textSelectedColor: #000000;
+}
+DataGrid
+{
+	borderColor: #000000;
+	themeColor: #CC7100;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+	color: #342208;
+}
+Panel
+{
+	borderColor: #CC7100;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+	color: #342208;
+	roundedBottomCorners: true;
+}
+TextInput
+{
+	borderColor: #CC7100;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+	color: #342208;
+}
+TextArea
+{
+	borderColor: #CC7100;
+	fontFamily: "Century Gothic";
+	fontSize: 12px;
+	color: #342208;
+	roundedBottomCorners: true;
+}
+
+Label
+{
+	color: #CC7100;
+	fontWeight: bold;
+	fontSize: 16;
+}
+.alertControlBar
+{
+	color: #000000;
+	fontWeight: bold;
+}
+@font-face
+{
+	fontFamily: "Century Gothic";
+	fontWeight: bold;
+	fontStyle: normal;
+	src: local("Century Gothic");
+}
+@font-face
+{
+	fontFamily: "Century Gothic";
+	fontWeight: normal;
+	fontStyle: normal;
+	src: local("Century Gothic");
+}
+

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Panel xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" width="314" height="216" fontSize="11" title="Log-In" fontWeight="normal">
+	<mx:Script>
+		<![CDATA[
+			import flash.events.Event
+			import mx.core.Application;
+		
+			public var loginUsername:String = "";
+			public var loginChanServPW:String = "";
+		
+			protected function chatConnect():void
+			{
+				this.loginUsername = txtUN.text;
+				this.loginChanServPW = txtPW.text;
+				this.dispatchEvent(new Event("Login"));
+			}
+		]]>
+	</mx:Script>
+	<mx:Label x="10" y="52" text="Username:" fontSize="12"/>
+	<mx:Label x="10" y="81" text="Password:" fontSize="12"/>
+	<mx:TextInput x="123" y="51" width="161" id="txtUN" maxChars="32"/>
+	<mx:TextInput x="123" y="80.05" width="161" id="txtPW" maxChars="32" displayAsPassword="true"/>
+	<mx:Text x="10" y="110" text="(Leave blank if you do not have one)" width="274" color="#000000" fontSize="10" fontWeight="normal" textAlign="center"/>
+	<mx:Text x="10" y="10" text="What do you want to be known as in chat?  This is not (usually) the same as your site login details!" width="274" color="#000000" fontSize="11" fontWeight="normal" textAlign="center"/>
+	<mx:Button x="108.5" y="137" label="Connect" id="btnConnect" click="chatConnect()"/>
+</mx:Panel>
